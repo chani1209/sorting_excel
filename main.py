@@ -20,7 +20,7 @@ class FileDeleter:
         self.file_name = file_name
 
     def set_directory_path(self):
-        directory_path = input("경로를 입력하세요: /Users/LGD")
+        directory_path = input("삭제할 경로를 입력하세요  /Users/chani:")
         if not os.path.exists(directory_path):
             print("경로가 존재하지 않습니다.")
             sys.exit(1)
@@ -89,8 +89,9 @@ class ExcelRowDeleter:
     def __init__(self):
         self.file_name = None
         self.delete_file_name = None
+        self.directory_path = None
         self.keyword_list = []
-        self.file_path_list = []
+        self.except_extension_list = []
 
     def set_file_list_name(self):
         file_name = input("목록이 있는 파일명을 입력하세요: ")
@@ -110,28 +111,89 @@ class ExcelRowDeleter:
             sys.exit(1)
         self.delete_file_name = delete_file_name
 
+    def set_directory_path(self):
+        directory_path = input("삭제할 경로를 입력하세요 /Users/chani :")
+        if not os.path.exists(directory_path):
+            print("경로가 존재하지 않습니다.")
+            sys.exit(1)
+        self.directory_path = directory_path
+
+    def make_except_extension_list(self, except_extension):
+        except_extension_list = except_extension.split(' ')
+        except_extension_list = [x.strip() for x in except_extension_list]
+        return except_extension_list
+
+    def set_except_extension_list(self):
+        input_extension_str = input("제외할 확장자를 입력하세요: .png .xlsx .txt 형식으로 소문자로 입력하세요. (공백시 전체) : ")
+        self.except_extension_list = self.make_except_extension_list(input_extension_str)
+
     def is_title_in_keyword_list(self, title):
         for keyword in self.keyword_list:
             if keyword in title:
                 return True
         return False
 
+    def is_file_extension_allowed(self, file_path):
+        _, file_extension = os.path.splitext(file_path)
+        return file_extension.lower() not in self.except_extension_list
+
+    def is_file_name_allowed(self, file_path):
+        file_name = os.path.basename(file_path)
+        for name in self.keyword_list:
+            if name in file_name:
+                return True
+        return False
+
+    def delete_files_with_name_in_directory(self):
+        files_to_delete = []
+        for root, dirs, files in os.walk(self.directory_path):
+            for file in files:
+                if file == 'nan':
+                    continue
+                file_path = os.path.join(root, file)
+                if self.is_file_name_allowed(file_path) and self.is_file_extension_allowed(file_path):
+                    files_to_delete.append(file_path)
+
+        if not files_to_delete:
+            print("삭제할 파일이 없습니다.")
+            sys.exit(1)
+
+        print("삭제 대상 파일 리스트:")
+        for file_path in files_to_delete:
+            print(file_path)
+
+        confirm = input("위의 파일들을 삭제하시겠습니까? (y/n): ")
+        if confirm.lower() == 'y':
+            for file_path in files_to_delete:
+                os.remove(file_path)
+                print(f"{file_path}을(를) 삭제했습니다.")
+        else:
+            print("파일 삭제를 취소했습니다.")
+            sys.exit(1)
+
     def run(self):
         try: 
             self.set_file_list_name()
             self.set_delete_file_name()
+            self.set_except_extension_list()
+            self.set_directory_path()
+
+            # 데이터 삭제
             df = pd.read_excel(self.file_name, header=None)
             self.keyword_list = df.iloc[:, 0].tolist()
+
+            self.delete_files_with_name_in_directory()
+
             workbook = load_workbook(self.delete_file_name)
             sheet = workbook.active
         
+            # 엑셀시트 삭제
             # 삭제할 열을 찾아서 삭제
             columns_to_delete = []
             
             for col_idx, header in enumerate(list(sheet.iter_rows(values_only=True))[0]):
                 if header is not None and self.is_title_in_keyword_list(str(header)):
                     columns_to_delete.append(col_idx + 1)
-                    print(col_idx + 1)
 
             if columns_to_delete:
                 for col_idx in reversed(columns_to_delete):
@@ -140,7 +202,7 @@ class ExcelRowDeleter:
                 workbook.save(self.delete_file_name)
                 print(f"{', '.join(self.keyword_list)}를 포함한 제목을 가진 열을 삭제했습니다.")
             else:
-                print(f"{', '.join(self.keyword_list)}를 포함한 제목을 가진 열이 존재하지 않습니다.")
+                print(f"{', '.join(self.keyword_list)}를 포함한 제목을 가진 열이 존재하지 않아 파일이 수정되지 않았습니다.")
 
         except SystemExit:
             pass
